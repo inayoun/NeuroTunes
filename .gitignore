@@ -1,0 +1,8 @@
+ei-core/out/
+__pycache__/
+.venv/
+node_modules/
+docs/data/*.csv
+AGENTS.md
+.env
+openmiir/eeg/

@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NeuroTunes Engagement Explorer</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+  <header class="top-nav">
+    <div class="brand">NeuroTunes</div>
+    <nav>
+      <button type="button" data-target="LANDING">Landing</button>
+      <button type="button" data-target="SAMPLER">Sampler</button>
+      <button type="button" data-target="RESULTS">Results</button>
+      <button type="button" data-target="PLAYLIST">Playlist</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-landing" data-state="LANDING">
+      <div class="hero">
+        <h1>Measure musical engagement from EEG.</h1>
+        <p>
+          NeuroTunes analyzes frontal brain activity to estimate listener engagement in the
+          OpenMIIR dataset. Explore the journey from raw EEG to playlist curation.
+        </p>
+        <button type="button" id="cta-start" class="primary">Start Listening Journey</button>
+      </div>
+      <div class="hero-aside">
+        <h2>Pipeline</h2>
+        <ol>
+          <li>Load BioSemi64 recordings</li>
+          <li>Preprocess + segment audio clips</li>
+          <li>Extract spectral features and EI</li>
+          <li>Rank subjects &amp; tracks</li>
+          <li>Build recommendations</li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="view-sampler" data-state="SAMPLER" hidden>
+      <div class="sampler-head">
+        <h2>Sampler</h2>
+        <p>Preview three clips while we warm up the engagement model.</p>
+      </div>
+      <div class="sampler-grid" id="sampler-grid"></div>
+      <div class="sampler-controls">
+        <button type="button" id="sampler-start" class="primary">Begin Sampler</button>
+        <button type="button" id="sampler-next" class="secondary" disabled>Continue</button>
+      </div>
+    </section>
+
+    <section id="view-loading" data-state="LOADING" hidden>
+      <div class="loading-card">
+        <div class="spinner" role="status" aria-live="polite"></div>
+        <p>Crunching windows, computing EI…</p>
+      </div>
+    </section>
+
+    <section id="view-results" data-state="RESULTS" hidden>
+      <div class="results-header">
+        <div>
+          <h2>Engagement Index by Clip</h2>
+          <p>Select a clip to inspect spectral dynamics and engagement.</p>
+        </div>
+        <div id="results-summary"></div>
+      </div>
+      <div class="results-layout">
+        <div class="results-left">
+          <div id="clips-chart" class="chart"></div>
+          <div class="clip-detail" id="clip-detail"></div>
+        </div>
+        <div class="results-right">
+          <h3>Frontal Dynamics</h3>
+          <canvas id="wave-canvas" width="720" height="240" aria-label="Frontal spectral dynamics"></canvas>
+          <div class="legend" id="wave-legend"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-playlist" data-state="PLAYLIST" hidden>
+      <div class="playlist-header">
+        <h2>Recommended Playlist</h2>
+        <p>Spotify picks inspired by the highest-engagement clips.</p>
+      </div>
+      <div id="playlist-grid" class="playlist-grid"></div>
+      <div id="playlist-empty" class="empty" hidden>
+        No playlist data yet. Run <code>node tools/build_spotify.js</code> locally to populate recommendations.
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <small>&copy; <span id="year"></span> NeuroTunes — Engagement Index Demo</small>
+  </footer>
+
+  <script>
+    const STATE_SEQUENCE = ['LANDING', 'SAMPLER', 'LOADING', 'RESULTS', 'PLAYLIST'];
+    const views = new Map();
+    const navButtons = new Map();
+    const unlockedStates = new Set(['LANDING']);
+    let currentState = 'LANDING';
+
+    let clipsData = [];
+    let windowsData = null;
+    let clipWindowsMap = new Map();
+    let selectedClipId = null;
+    let samplerRunning = false;
+    let samplerIndex = 0;
+    let samplerTimer = null;
+    let waveAnimationFrame = null;
+    let wavePointer = 0;
+    let waveData = null;
+
+    const samplerDur = 4000;
+    const loadingDelay = 2200;
+    const metrics = [
+      { key: 'alpha', label: 'Alpha (8–13 Hz)', color: '#ff7f0e' },
+      { key: 'beta', label: 'Beta (13–30 Hz)', color: '#2ca02c' },
+      { key: 'lgam', label: 'Low-γ (30–45 Hz)', color: '#9467bd' },
+      { key: 'sent', label: 'Spectral Entropy', color: '#1f77b4' },
+      { key: 'EI', label: 'Engagement Index', color: '#d62728' },
+    ];
+
+    document.addEventListener('DOMContentLoaded', init);
+
+    async function init() {
+      document.getElementById('year').textContent = new Date().getFullYear();
+      cacheDom();
+      attachNavHandlers();
+      bindSamplerControls();
+      await loadClipData();
+      renderSamplerCards();
+      renderWaveLegend();
+      setState('LANDING');
+    }
+
+    function cacheDom() {
+      document.querySelectorAll('section[data-state]').forEach((section) => {
+        views.set(section.dataset.state, section);
+      });
+      document.querySelectorAll('.top-nav button[data-target]').forEach((btn) => {
+        navButtons.set(btn.dataset.target, btn);
+      });
+    }
+
+    function attachNavHandlers() {
+      navButtons.forEach((btn, state) => {
+        btn.addEventListener('click', () => {
+          if (unlockedStates.has(state)) {
+            if (state === 'RESULTS') {
+              enterResults();
+            }
+            if (state === 'PLAYLIST') {
+              enterPlaylist();
+            }
+            setState(state);
+          }
+        });
+      });
+    }
+
+    function bindSamplerControls() {
+      document.getElementById('cta-start').addEventListener('click', () => setState('SAMPLER'));
+      document.getElementById('sampler-start').addEventListener('click', startSampler);
+      document.getElementById('sampler-next').addEventListener('click', () => setState('RESULTS'));
+    }
+
+    function setState(next) {
+      if (currentState === next) {
+        return;
+      }
+      if (!unlockedStates.has(next)) {
+        return;
+      }
+
+      views.forEach((section, state) => {
+        section.hidden = state !== next;
+      });
+      navButtons.forEach((btn, state) => {
+        const active = state === next;
+        btn.classList.toggle('active', active);
+        btn.disabled = !unlockedStates.has(state);
+      });
+      currentState = next;
+
+      if (next === 'LOADING') {
+        enterLoading();
+      }
+    }
+
+    async function loadClipData() {
+      try {
+        const response = await fetch('data/ai_clips.json');
+        if (!response.ok) {
+          throw new Error('Failed to load ai_clips.json');
+        }
+        clipsData = await response.json();
+        clipsData.sort((a, b) => (b.EI_mean ?? 0) - (a.EI_mean ?? 0));
+      } catch (error) {
+        console.error(error);
+        clipsData = [];
+      }
+    }
+
+    function renderSamplerCards() {
+      const grid = document.getElementById('sampler-grid');
+      grid.innerHTML = '';
+      const sample = clipsData.slice(0, 3);
+      if (sample.length === 0) {
+        grid.innerHTML = '<p class="empty">Run the pipeline to generate clip data.</p>';
+        document.getElementById('sampler-start').disabled = true;
+        return;
+      }
+
+      sample.forEach((clip, index) => {
+        const card = document.createElement('article');
+        card.className = 'sampler-card';
+        card.dataset.clipId = clip.clip_id;
+        card.innerHTML = `
+          <div class="sampler-rank">#${clip.rank}</div>
+          <h3>${formatClipLabel(clip.clip_id)}</h3>
+          <p class="sampler-meta">EI μ ${clip.EI_mean.toFixed(2)} · σ ${clip.EI_sd.toFixed(2)}</p>
+          <div class="sampler-progress" aria-hidden="true"><span></span></div>
+          <p class="sampler-status">Queued</p>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function startSampler() {
+      if (samplerRunning) {
+        return;
+      }
+      samplerRunning = true;
+      samplerIndex = 0;
+      document.getElementById('sampler-start').disabled = true;
+      document.getElementById('sampler-next').disabled = true;
+      unlockedStates.add('SAMPLER');
+      unlockedStates.add('LANDING');
+      runSamplerStep();
+    }
+
+    function runSamplerStep() {
+      const cards = Array.from(document.querySelectorAll('.sampler-card'));
+      if (samplerIndex >= cards.length) {
+        samplerRunning = false;
+        document.getElementById('sampler-next').disabled = false;
+        unlockedStates.add('RESULTS');
+        unlockedStates.add('PLAYLIST');
+        updateNavState();
+        return;
+      }
+
+      const card = cards[samplerIndex];
+      const status = card.querySelector('.sampler-status');
+      const progress = card.querySelector('.sampler-progress span');
+
+      status.textContent = 'Playing preview…';
+      progress.style.transition = `width ${samplerDur}ms linear`;
+      requestAnimationFrame(() => {
+        progress.style.width = '100%';
+      });
+
+      samplerTimer = setTimeout(() => {
+        status.textContent = 'Completed';
+        card.classList.add('done');
+        samplerIndex += 1;
+        runSamplerStep();
+      }, samplerDur);
+    }
+
+    function updateNavState() {
+      navButtons.forEach((btn, state) => {
+        btn.disabled = !unlockedStates.has(state);
+      });
+    }
+
+    async function enterLoading() {
+      unlockedStates.add('LOADING');
+      updateNavState();
+      await ensureWindowsLoaded();
+      setTimeout(() => {
+        setState('RESULTS');
+        enterResults();
+      }, loadingDelay);
+    }
+
+    async function ensureWindowsLoaded() {
+      if (windowsData !== null) {
+        return;
+      }
+      try {
+        const response = await fetch('data/ai_windows.csv');
+        if (!response.ok) {
+          throw new Error('Failed to load ai_windows.csv');
+        }
+        const csvText = await response.text();
+        windowsData = parseCsv(csvText);
+        clipWindowsMap = groupWindowsByClip(windowsData);
+      } catch (error) {
+        console.error(error);
+        windowsData = [];
+        clipWindowsMap = new Map();
+      }
+    }
+
+    function parseCsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const headers = lines[0].split(',');
+      return lines.slice(1).map((line) => {
+        if (!line.trim()) {
+          return null;
+        }
+        const cells = line.split(',');
+        const record = {};
+        headers.forEach((h, idx) => {
+          record[h] = cells[idx];
+        });
+        record.t0 = Number(record.t0);
+        record.t1 = Number(record.t1);
+        record.window_index = Number(record.window_index);
+        record.theta = Number(record.theta);
+        record.alpha = Number(record.alpha);
+        record.beta = Number(record.beta);
+        record.lgam = Number(record.lgam);
+        record.sent = Number(record.sent);
+        record.EI = Number(record.EI);
+        return record;
+      }).filter(Boolean);
+    }
+
+    function groupWindowsByClip(records) {
+      const map = new Map();
+      records.forEach((row) => {
+        if (!row.clip_id) {
+          return;
+        }
+        if (!map.has(row.clip_id)) {
+          map.set(row.clip_id, []);
+        }
+        map.get(row.clip_id).push(row);
+      });
+      map.forEach((rows) => rows.sort((a, b) => a.t0 - b.t0));
+      return map;
+    }
+
+    function enterResults() {
+      if (!windowsData || windowsData.length === 0 || clipsData.length === 0) {
+        document.getElementById('results-summary').innerHTML = '<p class="empty">Run the pipeline to see results.</p>';
+        return;
+      }
+      renderResultsChart();
+      const topClip = clipsData[0]?.clip_id;
+      if (topClip) {
+        selectClip(topClip);
+      }
+    }
+
+    function renderResultsChart() {
+      const chartDiv = document.getElementById('clips-chart');
+      const y = clipsData.map((clip) => clip.EI_mean ?? 0);
+      const x = clipsData.map((clip) => formatClipLabel(clip.clip_id));
+      const colors = clipsData.map((clip) => clip.clip_id === selectedClipId ? '#d62728' : '#1f77b4');
+
+      const trace = {
+        type: 'bar',
+        x,
+        y,
+        marker: { color: colors },
+        hovertemplate: 'EI μ %{y:.2f}<extra></extra>',
+      };
+
+      const layout = {
+        margin: { t: 10, r: 10, b: 60, l: 60 },
+        height: 360,
+        yaxis: { title: 'Engagement Index (EI)', zeroline: false },
+        xaxis: { title: 'Clip', tickangle: -30 },
+      };
+
+      Plotly.react(chartDiv, [trace], layout, { displayModeBar: false });
+      chartDiv.on('plotly_click', (event) => {
+        const clipLabel = event.points?.[0]?.x;
+        const clipId = findClipIdByLabel(clipLabel);
+        if (clipId) {
+          selectClip(clipId);
+        }
+      });
+
+      document.getElementById('results-summary').innerHTML = `
+        <div class="summary-card">
+          <p><strong>${clipsData.length}</strong> unique clips</p>
+          <p><strong>${windowsData.length}</strong> engagement windows</p>
+        </div>
+      `;
+    }
+
+    function selectClip(clipId) {
+      selectedClipId = clipId;
+      renderResultsChart();
+      renderClipDetail();
+      startWaveAnimation();
+    }
+
+    function renderClipDetail() {
+      const clip = clipsData.find((item) => item.clip_id === selectedClipId);
+      const detail = document.getElementById('clip-detail');
+      if (!clip) {
+        detail.innerHTML = '<p class="empty">Select a clip to inspect engagement.</p>';
+        return;
+      }
+
+      detail.innerHTML = `
+        <h3>${formatClipLabel(clip.clip_id)}</h3>
+        <ul>
+          <li><strong>Rank</strong> ${clip.rank}</li>
+          <li><strong>EI mean</strong> ${clip.EI_mean.toFixed(3)}</li>
+          <li><strong>EI sd</strong> ${(clip.EI_sd ?? 0).toFixed(3)}</li>
+          <li><strong>Windows</strong> ${clip.n_windows}</li>
+        </ul>
+      `;
+    }
+
+    function renderWaveLegend() {
+      const legend = document.getElementById('wave-legend');
+      legend.innerHTML = metrics.map((m) => `
+        <span><span class="swatch" style="background:${m.color}"></span>${m.label}</span>
+      `).join('');
+    }
+
+    function startWaveAnimation() {
+      cancelAnimationFrame(waveAnimationFrame);
+      const canvas = document.getElementById('wave-canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      waveData = clipWindowsMap.get(selectedClipId) || [];
+      if (!waveData.length) {
+        ctx.fillStyle = '#888';
+        ctx.fillText('No window data available for this clip.', 20, canvas.height / 2);
+        return;
+      }
+
+      const normalized = metrics.map((m) => normalizeSeries(waveData.map((row) => row[m.key])));
+      const times = waveData.map((row) => row.t0);
+      const totalFrames = Math.max(60, times.length);
+      wavePointer = 0;
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.lineWidth = 2;
+        const visible = Math.min(times.length, 600);
+        const startIndex = Math.max(0, wavePointer - visible);
+        const sliceTimes = times.slice(startIndex, wavePointer);
+
+        metrics.forEach((metric, idx) => {
+          const series = normalized[idx].slice(startIndex, wavePointer);
+          drawSeries(ctx, sliceTimes, series, metric.color, idx, canvas);
+        });
+
+        wavePointer = (wavePointer + 1) % totalFrames;
+        if (wavePointer === 0) {
+          wavePointer = visible;
+        }
+        waveAnimationFrame = requestAnimationFrame(draw);
+      }
+
+      wavePointer = Math.min(600, times.length);
+      waveAnimationFrame = requestAnimationFrame(draw);
+    }
+
+    function drawSeries(ctx, times, series, color, offset, canvas) {
+      if (series.length === 0) {
+        return;
+      }
+      ctx.strokeStyle = color;
+      ctx.beginPath();
+      const padding = 16;
+      const height = canvas.height - padding * 2;
+      const width = canvas.width - padding * 2;
+      const step = width / Math.max(1, series.length - 1);
+      series.forEach((value, idx) => {
+        const x = padding + idx * step;
+        const y = padding + height * (1 - value);
+        if (idx === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+      });
+      ctx.stroke();
+    }
+
+    function normalizeSeries(values) {
+      const finiteValues = values.filter((v) => Number.isFinite(v));
+      const min = Math.min(...finiteValues, 0);
+      const max = Math.max(...finiteValues, 1);
+      const range = max - min || 1;
+      return values.map((v) => {
+        if (!Number.isFinite(v)) {
+          return 0.5;
+        }
+        return (v - min) / range;
+      });
+    }
+
+    async function enterPlaylist() {
+      const grid = document.getElementById('playlist-grid');
+      const empty = document.getElementById('playlist-empty');
+      if (grid.dataset.loaded === 'true') {
+        return;
+      }
+      try {
+        const response = await fetch('data/playlist_recs.json');
+        if (!response.ok) {
+          throw new Error('Missing playlist data');
+        }
+        const items = await response.json();
+        if (!Array.isArray(items) || items.length === 0) {
+          throw new Error('Empty playlist');
+        }
+        renderPlaylist(items);
+        empty.hidden = true;
+        grid.dataset.loaded = 'true';
+      } catch (error) {
+        console.info(error.message);
+        grid.innerHTML = '';
+        empty.hidden = false;
+      }
+    }
+
+    function renderPlaylist(items) {
+      const grid = document.getElementById('playlist-grid');
+      grid.innerHTML = '';
+      items.slice(0, 12).forEach((item) => {
+        const card = document.createElement('article');
+        card.className = 'playlist-card';
+        card.innerHTML = `
+          <div class="cover" style="background-image:url('${item.image ?? ''}')"></div>
+          <div class="info">
+            <h3>${item.name}</h3>
+            <p>${item.artists}</p>
+            <a href="${item.url}" target="_blank" rel="noopener">Open in Spotify</a>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function formatClipLabel(id) {
+      return (id || '').replace('clip_', 'Clip ');
+    }
+
+    function findClipIdByLabel(label) {
+      const match = clipsData.find((clip) => formatClipLabel(clip.clip_id) === label);
+      return match?.clip_id ?? null;
+    }
+  </script>
+</body>
+</html>
