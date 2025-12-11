@@ -111,9 +111,13 @@ async function buildRecommendations(token, seeds) {
     return [];
   }
 
+  const seedList = seeds.slice(0, 5);
+  console.log('Seed track IDs:', seedList);
+
   const url = new URL('https://api.spotify.com/v1/recommendations');
   url.searchParams.set('limit', '12');
-  url.searchParams.set('seed_tracks', seeds.slice(0, 5).join(','));
+  url.searchParams.set('seed_tracks', seedList.join(','));
+  url.searchParams.set('market', 'US');
 
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
@@ -121,6 +125,8 @@ async function buildRecommendations(token, seeds) {
 
   if (!response.ok) {
     const text = await response.text();
+    console.error(`Recommendations request failed: ${response.status}`);
+    console.error('Response body:', text);
     throw new Error(`Recommendations request failed: ${response.status} ${text}`);
   }
 
@@ -131,12 +137,18 @@ async function buildRecommendations(token, seeds) {
 async function main() {
   try {
     const token = await getAccessToken();
+    console.log('Access token obtained successfully.');
 
     const searchCatalog = await buildSearchCatalog(token);
     const seedIds = Object.values(searchCatalog)
       .flatMap((tracks) => (tracks.length > 0 ? [tracks[0].id] : []));
 
-    const recommendations = await buildRecommendations(token, seedIds);
+    let recommendations = [];
+    try {
+      recommendations = await buildRecommendations(token, seedIds);
+    } catch (error) {
+      console.warn('Recommendations failed, using empty list:', error.message);
+    }
 
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(SEARCH_OUT_PATH, JSON.stringify(searchCatalog, null, 2));

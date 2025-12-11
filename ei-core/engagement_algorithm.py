@@ -205,6 +205,7 @@ def _annotations_from_events(raw: mne.io.BaseRaw) -> mne.Annotations | None:
     metadata = _load_stimuli_metadata(subject_code, raw_path) if raw_path else {}
 
     annotations = []
+    cue_duration = 2.0  # First 2 seconds are cue, not song
     for sample, _, event_id in events:
         clip_idx, condition = _decode_event(event_id)
         if clip_idx is None or condition != "listen":
@@ -214,8 +215,12 @@ def _annotations_from_events(raw: mne.io.BaseRaw) -> mne.Annotations | None:
         if not duration or duration <= 0:
             continue
 
-        onset = sample / sfreq
-        annotations.append((onset, duration, f"clip_{clip_idx:02d}"))
+        onset = sample / sfreq + cue_duration
+        song_duration = duration - cue_duration
+        if song_duration <= 0:
+            continue
+
+        annotations.append((onset, song_duration, f"clip_{clip_idx:02d}"))
 
     if not annotations:
         return None
@@ -410,14 +415,19 @@ def _zscore(series: pd.Series) -> pd.Series:
 
 
 def compute_ei(features_df: pd.DataFrame) -> pd.DataFrame:
-    """Add z-scored metrics and composite engagement index."""
+    """Add z-scored metrics and composite engagement index.
+    
+    EI = z(log(β / (α + θ)))
+    """
 
     df = features_df.copy()
-    df["z_alpha"] = _zscore(-df["alpha"])
-    df["z_beta"] = _zscore(df["beta"])
-    df["z_lgam"] = _zscore(df["lgam"])
-    df["z_sent"] = _zscore(df["sent"])
-    df["EI"] = df[["z_alpha", "z_beta", "z_lgam", "z_sent"]].sum(axis=1)
+    # Compute the ratio β / (α + θ), avoiding division by zero
+    denominator = df["alpha"] + df["theta"]
+    denominator[denominator == 0] = 1e-10  # Avoid log(0)
+    ratio = df["beta"] / denominator
+    # Take log and z-score
+    log_ratio = np.log(ratio)
+    df["EI"] = _zscore(log_ratio)
     return df
 
 

@@ -97,6 +97,7 @@
   </footer>
 
   <script>
+    console.log('NeuroTunes script loaded');
     const STATE_SEQUENCE = ['LANDING', 'SAMPLER', 'LOADING', 'RESULTS', 'PLAYLIST'];
     const views = new Map();
     const navButtons = new Map();
@@ -127,14 +128,18 @@
     document.addEventListener('DOMContentLoaded', init);
 
     async function init() {
+      console.log('init() called');
       document.getElementById('year').textContent = new Date().getFullYear();
       cacheDom();
+      console.log('cacheDom complete, views:', views.size, 'buttons:', navButtons.size);
       attachNavHandlers();
       bindSamplerControls();
       await loadClipData();
+      console.log('clipsData loaded:', clipsData.length, 'clips');
       renderSamplerCards();
       renderWaveLegend();
       setState('LANDING');
+      console.log('init complete');
     }
 
     function cacheDom() {
@@ -149,6 +154,7 @@
     function attachNavHandlers() {
       navButtons.forEach((btn, state) => {
         btn.addEventListener('click', () => {
+          console.log('Button clicked:', state, 'unlocked:', unlockedStates.has(state));
           if (unlockedStates.has(state)) {
             if (state === 'RESULTS') {
               enterResults();
@@ -163,16 +169,22 @@
     }
 
     function bindSamplerControls() {
-      document.getElementById('cta-start').addEventListener('click', () => setState('SAMPLER'));
+      document.getElementById('cta-start').addEventListener('click', () => {
+        unlockedStates.add('SAMPLER');
+        setState('SAMPLER');
+      });
       document.getElementById('sampler-start').addEventListener('click', startSampler);
-      document.getElementById('sampler-next').addEventListener('click', () => setState('RESULTS'));
+      document.getElementById('sampler-next').addEventListener('click', () => setState('LOADING'));
     }
 
     function setState(next) {
+      console.log('setState called:', next, 'current:', currentState);
       if (currentState === next) {
+        console.log('Already in state', next);
         return;
       }
       if (!unlockedStates.has(next)) {
+        console.log('State not unlocked:', next);
         return;
       }
 
@@ -185,6 +197,7 @@
         btn.disabled = !unlockedStates.has(state);
       });
       currentState = next;
+      console.log('setState complete, now in:', currentState);
 
       if (next === 'LOADING') {
         enterLoading();
@@ -248,6 +261,7 @@
       if (samplerIndex >= cards.length) {
         samplerRunning = false;
         document.getElementById('sampler-next').disabled = false;
+        unlockedStates.add('LOADING');
         unlockedStates.add('RESULTS');
         unlockedStates.add('PLAYLIST');
         updateNavState();
@@ -255,6 +269,7 @@
       }
 
       const card = cards[samplerIndex];
+      const clipId = card.dataset.clipId;
       const status = card.querySelector('.sampler-status');
       const progress = card.querySelector('.sampler-progress span');
 
@@ -264,7 +279,15 @@
         progress.style.width = '100%';
       });
 
+      // Play audio if available
+      const audioPath = `../openmiir/audio/${clipId}.mp3`;
+      const audio = new Audio(audioPath);
+      audio.play().catch(() => {
+        console.log(`Audio not found for ${clipId}`);
+      });
+
       samplerTimer = setTimeout(() => {
+        audio.pause();
         status.textContent = 'Completed';
         card.classList.add('done');
         samplerIndex += 1;
@@ -348,10 +371,13 @@
     }
 
     function enterResults() {
+      console.log('enterResults: windowsData:', windowsData?.length, 'clipsData:', clipsData.length);
       if (!windowsData || windowsData.length === 0 || clipsData.length === 0) {
+        console.error('Missing data for results view');
         document.getElementById('results-summary').innerHTML = '<p class="empty">Run the pipeline to see results.</p>';
         return;
       }
+      console.log('Rendering results with', clipsData.length, 'clips and', windowsData.length, 'windows');
       renderResultsChart();
       const topClip = clipsData[0]?.clip_id;
       if (topClip) {
@@ -460,11 +486,10 @@
           drawSeries(ctx, sliceTimes, series, metric.color, idx, canvas);
         });
 
-        wavePointer = (wavePointer + 1) % totalFrames;
-        if (wavePointer === 0) {
-          wavePointer = visible;
+        wavePointer += 1;
+        if (wavePointer < totalFrames) {
+          waveAnimationFrame = requestAnimationFrame(draw);
         }
-        waveAnimationFrame = requestAnimationFrame(draw);
       }
 
       wavePointer = Math.min(600, times.length);
