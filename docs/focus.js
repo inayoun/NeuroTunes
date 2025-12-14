@@ -39,7 +39,7 @@ async function startAnalysis() {
 
 async function loadAndProcessData() {
     const loadingTitle = document.getElementById('loading-title');
-    const totalTime = CLIP_TITLES.length * 500; // Total time in ms
+    const totalTime = CLIP_TITLES.length * 500;
     const startTime = Date.now();
     
     const updateProgress = () => {
@@ -47,7 +47,6 @@ async function loadAndProcessData() {
         const progress = Math.min((elapsed / totalTime) * 100, 100);
         currentLoadingProgress = progress;
         
-        // Update title based on progress
         const clipIndex = Math.floor((progress / 100) * CLIP_TITLES.length);
         if (clipIndex < CLIP_TITLES.length) {
             loadingTitle.textContent = `Sampling ${CLIP_TITLES[clipIndex]}...`;
@@ -60,7 +59,6 @@ async function loadAndProcessData() {
     
     updateProgress();
     
-    // Wait for all clips to be processed
     await new Promise(resolve => setTimeout(resolve, totalTime));
     try {
         await loadFocusData(selectedSubject);
@@ -155,29 +153,29 @@ function flipCard() {
     if (!card.classList.contains('flipped')) card.classList.add('flipped');
 }
 
-// Scroll-snap-aware flip using IntersectionObserver
 (() => {
-    const section31 = document.getElementById('section-3-1');
     const card = document.getElementById('flip-card');
-    if (!section31 || !card || !('IntersectionObserver' in window)) return;
+    const section31 = document.getElementById('section-3-1');
+    if (!card || !section31) return;
 
     let cardFlipped = false;
+    let hasScrolledInSection = false;
+    
     const observer = new IntersectionObserver((entries) => {
         entries.forEach((entry) => {
-            if (entry.target !== section31) return;
-            if (entry.isIntersecting && entry.intersectionRatio >= 0.9) {
-                if (!cardFlipped) {
-                    card.classList.add('flipped');
-                    cardFlipped = true;
-                }
-            } else {
-                if (cardFlipped) {
-                    card.classList.remove('flipped');
-                    cardFlipped = false;
+            if (entry.isIntersecting && entry.intersectionRatio > 0.8) {
+                if (!hasScrolledInSection) {
+                    hasScrolledInSection = true;
+                    setTimeout(() => {
+                        if (!cardFlipped) {
+                            card.classList.add('flipped');
+                            cardFlipped = true;
+                        }
+                    }, 800);
                 }
             }
         });
-    }, { threshold: [0, 0.5, 0.9, 1] });
+    }, { threshold: [0, 0.5, 0.8, 1] });
 
     observer.observe(section31);
 })();
@@ -188,7 +186,6 @@ function renderProfile() {
     renderTempoChart();
     renderTrackScatter();
     renderWaveLegend();
-    updateSessionText();
 }
 
 function renderGenreScatter() {
@@ -210,7 +207,6 @@ function renderGenreScatter() {
 }
 
 function renderTempoChart() {
-    // Extract BPM, Focus Index, and track title for each track
     const bpmFiPairs = focusData.tracks.map(t => {
         const meta = CLIP_METADATA[t.clip_id];
         return {
@@ -220,7 +216,6 @@ function renderTempoChart() {
         };
     }).filter(p => p.bpm > 0);
     
-    // Sort by BPM for line graph
     bpmFiPairs.sort((a, b) => a.bpm - b.bpm);
     
     const bpms = bpmFiPairs.map(p => p.bpm);
@@ -241,13 +236,13 @@ function renderTempoChart() {
         hoverinfo: 'text'
     }];
     const layout = {
-        xaxis: { title: 'BPM (Beats Per Minute)', gridcolor: '#2a2a4a' }, yaxis: { title: 'Focus Index', gridcolor: '#2a2a4a' },
+        xaxis: { title: 'BPM (Beats Per Minute)', gridcolor: '#2a2a4a' }, 
+        yaxis: { title: 'Focus Index', gridcolor: '#2a2a4a', range: [0, 100] },
         paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(20,30,50,0.3)', font: { color: '#e0e0e0' }, showlegend: false,
         hovermode: 'closest'
     };
     Plotly.newPlot('tempo-chart', data, layout, { displayModeBar: false, staticPlot: false });
     
-    // Find BPM with highest focus
     const maxIdx = fiValues.indexOf(Math.max(...fiValues));
     const bestBpm = bpms[maxIdx];
     document.getElementById('tempo-description').textContent = `BPM ${bestBpm} produced the highest focus score for this brain.`;
@@ -289,7 +284,7 @@ function renderTrackScatter() {
         font: { color: '#e0e0e0' },
         showlegend: false,
         hovermode: 'closest',
-        margin: { l: 60, r: 20, t: 20, b: 50 },
+        margin: { l: 60, r: 20, t: 20, b: 60 },
         autosize: true
     };
 
@@ -333,10 +328,9 @@ let waveAnimationFrame = null;
 
 const waveMetrics = [
     { key: 'EI', label: 'Focus Index', color: '#00d4ff', lineWidth: 3 },
-    // Slightly vibrant, still toned vs EI
-    { key: 'alpha', label: 'Alpha (8-13 Hz)', color: '#ff8fc4', lineWidth: 1.5 },   // soft pink
-    { key: 'beta', label: 'Beta (13-30 Hz)', color: '#9a7bff', lineWidth: 1.5 },    // muted violet
-    { key: 'theta', label: 'Theta (4-8 Hz)', color: '#ffcc6e', lineWidth: 1.5 }     // warm amber
+    { key: 'alpha', label: 'Alpha (8-13 Hz)', color: '#ff8fc4', lineWidth: 1.5 },
+    { key: 'beta', label: 'Beta (13-30 Hz)', color: '#9a7bff', lineWidth: 1.5 },
+    { key: 'theta', label: 'Theta (4-8 Hz)', color: '#ffcc6e', lineWidth: 1.5 }
 ];
 
 function renderWaveLegend() {
@@ -344,13 +338,12 @@ function renderWaveLegend() {
     legend.innerHTML = waveMetrics.map((m) => `
         <span><span class="swatch" style="background:${m.color}"></span>${m.label}</span>
     `).join('');
-    legend.style.display = 'none'; // Hidden until track is clicked
+    legend.style.display = 'none';
 }
 
 async function renderTrackDetail(track) {
     console.log('Loading window data for clip:', track.clip_id);
     
-    // Hide placeholder and show canvas
     document.getElementById('wave-placeholder').classList.add('hidden');
     
     try {
@@ -378,7 +371,6 @@ async function renderTrackDetail(track) {
         
         clipWindows.sort((a, b) => parseFloat(a.t0) - parseFloat(b.t0));
         
-        // Use absolute session time (not clip-relative)
         const waveData = clipWindows.map(w => ({
             t0: parseFloat(w.t0),
             EI: parseFloat(w.EI),
@@ -410,7 +402,6 @@ function startWaveAnimation(waveData) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Show legend when animation starts
     document.getElementById('wave-legend').style.display = 'flex';
     
     if (!waveData.length) {
@@ -418,7 +409,6 @@ function startWaveAnimation(waveData) {
         return;
     }
     
-    // Normalize all metrics to 0-1 range
     const normalized = waveMetrics.map((m) => normalizeSeries(waveData.map((row) => row[m.key])));
     const times = waveData.map((row) => row.t0);
     const totalFrames = Math.max(60, times.length);
@@ -482,27 +472,17 @@ function normalizeSeries(values) {
     });
 }
 
-function updateSessionText() {
-    const bestGenre = focusData.best_genre;
-    const worstGenre = focusData.worst_genre;
-    const tempoWinner = focusData.tempo_winner;
-    document.getElementById('deep-focus-text').textContent = `${bestGenre} clips had the strongest, most stable Focus Index. ${tempoWinner} tempos worked best for sustained focus.`;
-    document.getElementById('break-text').textContent = `${worstGenre} had the lowest focus index and the most jittery responses, making it better for breaks and energizing moments.`;
-}
-
-// Scroll-based blob movement
 window.addEventListener('scroll', () => {
     const scrollY = window.scrollY;
     const blobElement = document.querySelector('body::before');
     if (document.body.style) {
-        const offsetX = Math.sin(scrollY * 0.002) * 80;
-        const offsetY = Math.cos(scrollY * 0.003) * 80;
+        const offsetX = Math.sin(scrollY * 0.005) * 120;
+        const offsetY = Math.cos(scrollY * 0.007) * 120;
         document.body.style.setProperty('--blob-offset-x', `${offsetX}px`);
         document.body.style.setProperty('--blob-offset-y', `${offsetY}px`);
     }
 });
 
-// Loading waveform animation
 let loadingWaveAnimationFrame = null;
 let currentLoadingProgress = 0;
 
@@ -518,11 +498,9 @@ function drawLoadingWaveform() {
     
     ctx.clearRect(0, 0, width, height);
     
-    // Calculate waveform points with random amplitude variation
     const points = [];
     for (let x = 0; x < width; x++) {
         const normalizedX = (x / width) * 20 * Math.PI;
-        // More random amplitude variation
         const amp1 = Math.sin(normalizedX * 0.5 + time) * 0.2;
         const amp2 = Math.sin(normalizedX * 1.2 + time * 1.3) * 0.15;
         const amp3 = Math.sin(normalizedX * 2.5 + time * 0.7) * 0.1;
@@ -532,7 +510,6 @@ function drawLoadingWaveform() {
         points.push({ x, y });
     }
     
-    // Draw gray outline waveform (thicker)
     ctx.strokeStyle = '#808080';
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
@@ -547,7 +524,6 @@ function drawLoadingWaveform() {
     });
     ctx.stroke();
     
-    // Draw filled magenta waveform up to progress (thicker)
     const fillWidth = (width * currentLoadingProgress) / 100;
     ctx.strokeStyle = 'rgba(200, 0, 255, 0.9)';
     ctx.lineWidth = 4;

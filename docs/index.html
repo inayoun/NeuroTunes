@@ -1,587 +1,261 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NeuroTunes Engagement Explorer</title>
-  <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroFocus</title>
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><text x="0" y="20" font-size="20" fill="%23a855f7">♪</text></svg>') 12 12, auto; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; background: linear-gradient(180deg, #0a0e27 0%, #1a1f3a 50%, #0f2a3d 100%); color: #e0e0e0; min-height: 100vh; position: relative; overflow-x: hidden; }
+        body::before { content: ''; position: fixed; top: 40%; left: 30%; width: 1200px; height: 1200px; background: radial-gradient(circle, rgba(200, 0, 255, 0.25) 0%, rgba(200, 0, 255, 0.12) 40%, transparent 70%); border-radius: 50%; filter: blur(100px); pointer-events: none; z-index: 0; transform: translate(calc(-50% + var(--blob-offset-x, 0px)), calc(-50% + var(--blob-offset-y, 0px))); transition: transform 0.1s ease-out; }
+        html { scroll-behavior: smooth; scroll-snap-type: y mandatory; }
+        .container { max-width: 960px; margin: 0 auto; padding: 32px; }
+        .screen { display: none; }
+        .screen.active { display: block; }
+        #profile-screen.active { display: flex; flex-direction: column; }
+        #profile-screen { width: 100%; }
+        h1 { font-size: 40px; font-weight: 600; margin-bottom: 16px; color: #fff; }
+        h2 { font-size: 28px; font-weight: 600; margin-bottom: 16px; color: #fff; }
+        h3 { font-size: 20px; font-weight: 500; margin-bottom: 12px; color: #fff; }
+        p { font-size: 16px; line-height: 1.6; color: #b0b0b0; margin-bottom: 12px; }
+        .card { background: rgba(30, 40, 70, 0.6); border-radius: 24px; padding: 32px; margin-bottom: 24px; border: 1px solid rgba(100, 150, 200, 0.1); position: relative; z-index: 1; }
+        .btn { padding: 14px 32px; font-size: 16px; font-weight: 500; border-radius: 12px; border: none; cursor: pointer; transition: all 0.3s; position: relative; z-index: 1; }
+        .btn-primary { background: linear-gradient(135deg, #00d4ff 0%, #0099cc 100%); color: #fff; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0, 212, 255, 0.4); }
+        .subject-selector { display: flex; flex-direction: column; gap: 16px; margin: 24px 0; }
+        .subject-card { background: rgba(40, 50, 80, 0.5); border: 2px solid rgba(100, 150, 200, 0.2); border-radius: 16px; padding: 20px; cursor: pointer; transition: all 0.3s; }
+        .subject-card:hover { border-color: rgba(0, 212, 255, 0.5); background: rgba(40, 50, 80, 0.7); }
+        .subject-card.selected { border-color: #00d4ff; background: rgba(0, 212, 255, 0.1); }
+        .subject-label { font-size: 18px; font-weight: 500; color: #fff; }
+        #loading-screen.active { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 80vh; text-align: center; }
+        .waveform { width: 200px; height: 200px; border-radius: 50%; background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(150, 0, 255, 0.2) 100%); animation: pulse 2s ease-in-out infinite; margin: 32px auto; }
+        @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.6; } 50% { transform: scale(1.1); opacity: 1; } }
+        .progress-bar { width: 300px; height: 4px; background: rgba(100, 100, 150, 0.3); border-radius: 2px; margin: 24px auto; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #00d4ff 0%, #9000ff 100%); width: 0%; transition: width 0.3s; }
+        .loading-title { font-size: 24px; color: #00d4ff; margin-top: 16px; }
+        .flip-card { perspective: 1000px; height: 400px; cursor: pointer; }
+        .flip-card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s; transform-style: preserve-3d; }
+        .flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+        .flip-card-front, .flip-card-back { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: space-between; text-align: center; padding: 32px; background: rgba(30, 40, 70, 0.6); border-radius: 24px; border: 1px solid rgba(100, 150, 200, 0.1); }
+        .flip-card-back { transform: rotateY(180deg); background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(150, 0, 255, 0.1) 100%); }
+        .flip-hint { font-size: 14px; color: #808080; }
+        .chart-container { margin: 24px 0; min-height: 500px; cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><text x="0" y="20" font-size="20" fill="%23a855f7">♪</text></svg>') 12 12, pointer; }
+        .chart-container-full { margin: 0; height: 100%; cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><text x="0" y="20" font-size="20" fill="%23a855f7">♪</text></svg>') 12 12, pointer; }
+        .track-detail-container { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+        .track-detail-container-full { display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; margin: 0; height: calc(100vh - 200px); }
+        .detail-panel { background: rgba(40, 50, 80, 0.5); border-radius: 16px; padding: 24px; min-height: 400px; }
+        .detail-panel-full { background: rgba(40, 50, 80, 0.5); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; }
+        .track-info-panel { background: rgba(40, 50, 80, 0.5); border-radius: 16px; padding: 20px; height: 100%; overflow-y: auto; }
+        .track-info-item { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(100, 150, 200, 0.1); }
+        .track-info-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .track-info-label { font-size: 11px; color: #808080; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+        .track-info-value { font-size: 14px; color: #fff; font-weight: 500; }
+        .full-page-section { width: 100%; min-height: 100vh; display: flex; align-items: center; justify-content: center; scroll-snap-align: start; scroll-snap-stop: always; padding: 20px; }
+        #section-3-4 { padding: 20px; }
+        .section-content { width: 100%; max-width: 1200px; }
+        .section-content h2 { margin-bottom: 24px; }
+        .section-content p { margin-bottom: 24px; }
+        .placeholder-message { display: flex; align-items: center; justify-content: center; height: 100%; color: #808080; font-style: italic; }
+        #wave-canvas { display: block; width: 100%; max-width: 720px; height: auto; border-radius: 8px; background: rgba(20,30,50,0.3); margin: 0 auto; }
+        .wave-legend { display: none; gap: 16px; flex-wrap: wrap; justify-content: center; margin-top: 12px; font-size: 13px; color: #b0b0b0; }
+        .wave-legend span { display: flex; align-items: center; gap: 6px; }
+        .wave-legend .swatch { width: 20px; height: 3px; border-radius: 2px; display: inline-block; }
+        #wave-placeholder { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+        #wave-placeholder.hidden { display: none; }
+        #track-detail { position: relative; }
+        .session-section { margin: 32px 0; }
+        .button-group { display: flex; gap: 16px; margin-top: 32px; }
+        .text-center { text-align: center; }
+        .mt-4 { margin-top: 32px; }
+        @media (max-width: 768px) { .track-detail-container { grid-template-columns: 1fr; } .button-group { flex-direction: column; } }
+    </style>
 </head>
 <body>
-  <header class="top-nav">
-    <div class="brand">NeuroTunes</div>
-    <nav>
-      <button type="button" data-target="LANDING">Landing</button>
-      <button type="button" data-target="SAMPLER">Sampler</button>
-      <button type="button" data-target="RESULTS">Results</button>
-      <button type="button" data-target="PLAYLIST">Playlist</button>
-    </nav>
-  </header>
-
-  <main>
-    <section id="view-landing" data-state="LANDING">
-      <div class="hero">
-        <h1>Measure musical engagement from EEG.</h1>
-        <p>
-          NeuroTunes analyzes frontal brain activity to estimate listener engagement in the
-          OpenMIIR dataset. Explore the journey from raw EEG to playlist curation.
-        </p>
-        <button type="button" id="cta-start" class="primary">Start Listening Journey</button>
-      </div>
-      <div class="hero-aside">
-        <h2>Pipeline</h2>
-        <ol>
-          <li>Load BioSemi64 recordings</li>
-          <li>Preprocess + segment audio clips</li>
-          <li>Extract spectral features and EI</li>
-          <li>Rank subjects &amp; tracks</li>
-          <li>Build recommendations</li>
-        </ol>
-      </div>
-    </section>
-
-    <section id="view-sampler" data-state="SAMPLER" hidden>
-      <div class="sampler-head">
-        <h2>Sampler</h2>
-        <p>Preview three clips while we warm up the engagement model.</p>
-      </div>
-      <div class="sampler-grid" id="sampler-grid"></div>
-      <div class="sampler-controls">
-        <button type="button" id="sampler-start" class="primary">Begin Sampler</button>
-        <button type="button" id="sampler-next" class="secondary" disabled>Continue</button>
-      </div>
-    </section>
-
-    <section id="view-loading" data-state="LOADING" hidden>
-      <div class="loading-card">
-        <div class="spinner" role="status" aria-live="polite"></div>
-        <p>Crunching windows, computing EI…</p>
-      </div>
-    </section>
-
-    <section id="view-results" data-state="RESULTS" hidden>
-      <div class="results-header">
-        <div>
-          <h2>Engagement Index by Clip</h2>
-          <p>Select a clip to inspect spectral dynamics and engagement.</p>
+    <div id="start-screen" class="screen active">
+        <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 40px 20px;">
+            <div class="card text-center" style="max-width: 500px;">
+                <h1>Find Your NeuroTune</h1>
+                <p>Discover how different music genres and tempos affect your brain's focus patterns.</p>
+                <div class="subject-selector">
+                    <div class="subject-card" onclick="selectSubject('P01')">
+                        <input type="radio" name="subject" id="subject-p01" value="P01">
+                        <label for="subject-p01" class="subject-label">36 year old multi-instrumentalist's brainwaves</label>
+                    </div>
+                    <div class="subject-card" onclick="selectSubject('P05')">
+                        <input type="radio" name="subject" id="subject-p05" value="P05">
+                        <label for="subject-p05" class="subject-label">22 year old turntable music enthusiast's brainwaves</label>
+                    </div>
+                    <div class="subject-card" onclick="selectSubject('P07')">
+                        <input type="radio" name="subject" id="subject-p07" value="P07">
+                        <label for="subject-p07" class="subject-label">24 year old keyboardist's brainwaves</label>
+                    </div>
+                    <div class="subject-card" style="opacity: 0.5; cursor: not-allowed;">
+                        <label class="subject-label">Upload your own EEG (coming soon...)</label>
+                    </div>
+                </div>
+                <button class="btn btn-primary mt-4" onclick="startAnalysis()" id="analyze-btn" disabled>Analyze This Brain</button>
+            </div>
         </div>
-        <div id="results-summary"></div>
-      </div>
-      <div class="results-layout">
-        <div class="results-left">
-          <div id="clips-chart" class="chart"></div>
-          <div class="clip-detail" id="clip-detail"></div>
+    </div>
+
+    <div id="loading-screen" class="screen">
+        <div style="width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 32px;">
+            <canvas id="loading-waveform" width="1200" height="200" aria-label="Loading waveform" style="width: 100%; max-width: 1200px; height: auto;"></canvas>
+            <h2 class="loading-title" id="loading-title">Sampling Chim Chim Cheree...</h2>
         </div>
-        <div class="results-right">
-          <h3>Frontal Dynamics</h3>
-          <canvas id="wave-canvas" width="720" height="240" aria-label="Frontal spectral dynamics"></canvas>
-          <div class="legend" id="wave-legend"></div>
+    </div>
+
+    <div id="profile-screen" class="screen">
+        <section class="full-page-section" id="section-3-1">
+            <div class="section-content">
+                <div class="flip-card" id="flip-card">
+                    <div class="flip-card-inner">
+                        <div class="flip-card-front">
+                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; text-align: center;">
+                                <h2>Among the 12 clips and 3 genres…</h2>
+                            </div>
+                            <div class="flip-hint">
+                                <div>Scroll to reveal</div>
+                                <div style="font-size: 20px; margin-top: 8px;">↓</div>
+                            </div>
+                        </div>
+                        <div class="flip-card-back">
+                            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; text-align: center;">
+                                <p id="best-genre-text" style="font-size: 32px; font-weight: 600; color: #fff; margin: 0; line-height: 1.4;"> music showed the strongest, most stable Focus Index.</p>
+                            </div>
+                            <div class="flip-hint">
+                                <div>Continue scrolling</div>
+                                <div style="font-size: 20px; margin-top: 8px;">↓</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="full-page-section" id="section-3-2">
+            <div class="section-content">
+                <h2>Your Focus Tempo</h2>
+                <p id="tempo-description">Exploring how different tempos affect your focus...</p>
+                <div id="tempo-chart" class="chart-container"></div>
+            </div>
+        </section>
+
+        <section class="full-page-section" id="section-3-3">
+            <div class="section-content">
+                <h2>How Each Genre Supports Your Focus</h2>
+                <p>Right = higher Focus Index · Up = more stable focus over time</p>
+                <div id="genre-scatter" class="chart-container"></div>
+            </div>
+        </section>
+
+        <section class="full-page-section" id="section-3-4">
+            <div class="section-content">
+                <h2>Focus per Track</h2>
+                <div class="track-detail-container-full">
+                    <div class="detail-panel-full" style="grid-column: 1 / 3;">
+                        <h3>Track Map</h3>
+                        <div style="display: flex; gap: 24px; margin-bottom: 12px; font-size: 11px; color: #b0b0b0; flex-wrap: wrap;">
+                            <div style="display: flex; gap: 12px; align-items: center;">
+                                <span style="font-weight: 600; color: #fff;">Genre:</span>
+                                <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ff6b9d;"></span>Lyrics</span>
+                                <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #00d4ff;"></span>Instrumental</span>
+                                <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #ffd700;"></span>Classical</span>
+                            </div>
+                            <div style="display: flex; gap: 12px; align-items: center;">
+                                <span style="font-weight: 600; color: #fff;">Tempo:</span>
+                                <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #808080;"></span>Slow</span>
+                                <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 8px; height: 8px; background: #808080;"></span>Medium</span>
+                                <span style="display: flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 8px; height: 8px; background: #808080; transform: rotate(45deg);"></span>Fast</span>
+                            </div>
+                        </div>
+                        <div id="track-scatter" class="chart-container-full"></div>
+                    </div>
+                    
+                    <div class="detail-panel-full">
+                        <h3>Focus Waves</h3>
+                        <div id="track-detail" style="height: 100%; display: flex; flex-direction: column;">
+                            <canvas id="wave-canvas" width="720" height="200" aria-label="Focus waves" style="flex: 1;"></canvas>
+                            <div class="wave-legend" id="wave-legend"></div>
+                            <div class="placeholder-message" id="wave-placeholder">Click a track on the map to see its focus wave.</div>
+                        </div>
+                    </div>
+                    
+                    <div class="track-info-panel">
+                        <div id="track-info-container">
+                            <p style="color: #808080; font-style: italic;">Click a track to view details</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="full-page-section">
+            <div style="display: flex; align-items: center; justify-content: center;">
+                <button class="btn btn-primary" onclick="navigateTo('session')">How to read the waves + Focus Index</button>
+            </div>
+        </section>
+    </div>
+
+    <div id="session-screen" class="screen">
+        <div class="container">
+            <div class="card">
+                <h1>How to read the waves + Focus Index</h1>
+                
+                <div class="session-section">
+                    <h3>EEG frequency bands (Hz)</h3>
+                    <div style="padding-left: 20px;">
+                        <p>EEG, a measure of brain activity, is often summarized by how much power is present in specific frequency ranges:</p>
+                        <ul style="color: #b0b0b0; line-height: 1.8; margin-top: 12px;">
+                            <li><strong style="color: #fff;">Theta (4–8 Hz):</strong> increases with drowsiness and deep relaxation</li>
+                            <li><strong style="color: #fff;">Alpha (8–12 Hz):</strong> increases with relaxation and light meditation</li>
+                            <li><strong style="color: #fff;">Beta (13–30 Hz):</strong> increases with active concentration and attention control</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="session-section">
+                    <h3>What the Focus Index measures</h3>
+                    <div style="padding-left: 20px;">
+                        <p>NeuroTunes uses a simple, inspectable index based on frontal EEG:</p>
+                        <div style="text-align: center; margin: 24px 0; font-size: 16px; color: #00d4ff; font-family: 'Courier New', monospace;">
+                            <span>FI = z(log(</span><math style="font-size: 18px; color: #00d4ff; display: inline-block; vertical-align: middle; margin: 0 4px;"><mfrac><mi>β</mi><mrow><mi>α</mi><mo>+</mo><mi>θ</mi></mrow></mfrac></math><span>))</span>
+                        </div>
+                        <p>Essentially, the ratio of beta to (alpha + theta), normalized for easy comparison between subjects.</p>
+                        <p style="margin-top: 16px;"><strong style="color: #fff;">Meaning,</strong></p>
+                        <ul style="color: #b0b0b0; line-height: 1.8; margin-top: 8px;">
+                            <li><strong style="color: #fff;">Higher FI</strong> = relatively higher beta compared to alpha+theta.</li>
+                            <li><strong style="color: #fff;">Lower FI</strong> = relatively lower beta compared to alpha+theta.</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="session-section">
+                    <h3>What "stability" means</h3>
+                    <div style="padding-left: 20px;">
+                        <p>Stability is how much the Focus Index fluctuates during a clip.</p>
+                        <ul style="color: #b0b0b0; line-height: 1.8; margin-top: 12px;">
+                            <li><strong style="color: #fff;">More stable</strong> = FI changes less over time</li>
+                            <li><strong style="color: #fff;">Less stable</strong> = FI is more "jittery" over windows</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="session-section" style="border-top: 1px solid rgba(100, 150, 200, 0.1); padding-top: 24px;">
+                    <p style="font-size: 13px; color: #808080; line-height: 1.6;">
+                        This is a relative, bandpower-based metric computed from noisy EEG; it is not a clinical measure and can be affected by eye blinks, movement, or electrode contact.
+                    </p>
+                </div>
+                
+                <div class="button-group">
+                    <button class="btn btn-primary" onclick="navigateTo('profile')">Back to Focus Profile</button>
+                    <button class="btn btn-primary" onclick="navigateTo('start')">Start Over</button>
+                </div>
+            </div>
         </div>
-      </div>
-    </section>
+    </div>
 
-    <section id="view-playlist" data-state="PLAYLIST" hidden>
-      <div class="playlist-header">
-        <h2>Recommended Playlist</h2>
-        <p>Spotify picks inspired by the highest-engagement clips.</p>
-      </div>
-      <div id="playlist-grid" class="playlist-grid"></div>
-      <div id="playlist-empty" class="empty" hidden>
-        No playlist data yet. Run <code>node tools/build_spotify.js</code> locally to populate recommendations.
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <small>&copy; <span id="year"></span> NeuroTunes — Engagement Index Demo</small>
-  </footer>
-
-  <script>
-    console.log('NeuroTunes script loaded');
-    const STATE_SEQUENCE = ['LANDING', 'SAMPLER', 'LOADING', 'RESULTS', 'PLAYLIST'];
-    const views = new Map();
-    const navButtons = new Map();
-    const unlockedStates = new Set(['LANDING']);
-    let currentState = 'LANDING';
-
-    let clipsData = [];
-    let windowsData = null;
-    let clipWindowsMap = new Map();
-    let selectedClipId = null;
-    let samplerRunning = false;
-    let samplerIndex = 0;
-    let samplerTimer = null;
-    let waveAnimationFrame = null;
-    let wavePointer = 0;
-    let waveData = null;
-
-    const samplerDur = 4000;
-    const loadingDelay = 2200;
-    const metrics = [
-      { key: 'alpha', label: 'Alpha (8–13 Hz)', color: '#ff7f0e' },
-      { key: 'beta', label: 'Beta (13–30 Hz)', color: '#2ca02c' },
-      { key: 'lgam', label: 'Low-γ (30–45 Hz)', color: '#9467bd' },
-      { key: 'sent', label: 'Spectral Entropy', color: '#1f77b4' },
-      { key: 'EI', label: 'Engagement Index', color: '#d62728' },
-    ];
-
-    document.addEventListener('DOMContentLoaded', init);
-
-    async function init() {
-      console.log('init() called');
-      document.getElementById('year').textContent = new Date().getFullYear();
-      cacheDom();
-      console.log('cacheDom complete, views:', views.size, 'buttons:', navButtons.size);
-      attachNavHandlers();
-      bindSamplerControls();
-      await loadClipData();
-      console.log('clipsData loaded:', clipsData.length, 'clips');
-      renderSamplerCards();
-      renderWaveLegend();
-      setState('LANDING');
-      console.log('init complete');
-    }
-
-    function cacheDom() {
-      document.querySelectorAll('section[data-state]').forEach((section) => {
-        views.set(section.dataset.state, section);
-      });
-      document.querySelectorAll('.top-nav button[data-target]').forEach((btn) => {
-        navButtons.set(btn.dataset.target, btn);
-      });
-    }
-
-    function attachNavHandlers() {
-      navButtons.forEach((btn, state) => {
-        btn.addEventListener('click', () => {
-          console.log('Button clicked:', state, 'unlocked:', unlockedStates.has(state));
-          if (unlockedStates.has(state)) {
-            if (state === 'RESULTS') {
-              enterResults();
-            }
-            if (state === 'PLAYLIST') {
-              enterPlaylist();
-            }
-            setState(state);
-          }
-        });
-      });
-    }
-
-    function bindSamplerControls() {
-      document.getElementById('cta-start').addEventListener('click', () => {
-        unlockedStates.add('SAMPLER');
-        setState('SAMPLER');
-      });
-      document.getElementById('sampler-start').addEventListener('click', startSampler);
-      document.getElementById('sampler-next').addEventListener('click', () => setState('LOADING'));
-    }
-
-    function setState(next) {
-      console.log('setState called:', next, 'current:', currentState);
-      if (currentState === next) {
-        console.log('Already in state', next);
-        return;
-      }
-      if (!unlockedStates.has(next)) {
-        console.log('State not unlocked:', next);
-        return;
-      }
-
-      views.forEach((section, state) => {
-        section.hidden = state !== next;
-      });
-      navButtons.forEach((btn, state) => {
-        const active = state === next;
-        btn.classList.toggle('active', active);
-        btn.disabled = !unlockedStates.has(state);
-      });
-      currentState = next;
-      console.log('setState complete, now in:', currentState);
-
-      if (next === 'LOADING') {
-        enterLoading();
-      }
-    }
-
-    async function loadClipData() {
-      try {
-        const response = await fetch('data/ai_clips.json');
-        if (!response.ok) {
-          throw new Error('Failed to load ai_clips.json');
-        }
-        clipsData = await response.json();
-        clipsData.sort((a, b) => (b.EI_mean ?? 0) - (a.EI_mean ?? 0));
-      } catch (error) {
-        console.error(error);
-        clipsData = [];
-      }
-    }
-
-    function renderSamplerCards() {
-      const grid = document.getElementById('sampler-grid');
-      grid.innerHTML = '';
-      const sample = clipsData.slice(0, 3);
-      if (sample.length === 0) {
-        grid.innerHTML = '<p class="empty">Run the pipeline to generate clip data.</p>';
-        document.getElementById('sampler-start').disabled = true;
-        return;
-      }
-
-      sample.forEach((clip, index) => {
-        const card = document.createElement('article');
-        card.className = 'sampler-card';
-        card.dataset.clipId = clip.clip_id;
-        card.innerHTML = `
-          <div class="sampler-rank">#${clip.rank}</div>
-          <h3>${formatClipLabel(clip.clip_id)}</h3>
-          <p class="sampler-meta">EI μ ${clip.EI_mean.toFixed(2)} · σ ${clip.EI_sd.toFixed(2)}</p>
-          <div class="sampler-progress" aria-hidden="true"><span></span></div>
-          <p class="sampler-status">Queued</p>
-        `;
-        grid.appendChild(card);
-      });
-    }
-
-    function startSampler() {
-      if (samplerRunning) {
-        return;
-      }
-      samplerRunning = true;
-      samplerIndex = 0;
-      document.getElementById('sampler-start').disabled = true;
-      document.getElementById('sampler-next').disabled = true;
-      unlockedStates.add('SAMPLER');
-      unlockedStates.add('LANDING');
-      runSamplerStep();
-    }
-
-    function runSamplerStep() {
-      const cards = Array.from(document.querySelectorAll('.sampler-card'));
-      if (samplerIndex >= cards.length) {
-        samplerRunning = false;
-        document.getElementById('sampler-next').disabled = false;
-        unlockedStates.add('LOADING');
-        unlockedStates.add('RESULTS');
-        unlockedStates.add('PLAYLIST');
-        updateNavState();
-        return;
-      }
-
-      const card = cards[samplerIndex];
-      const clipId = card.dataset.clipId;
-      const status = card.querySelector('.sampler-status');
-      const progress = card.querySelector('.sampler-progress span');
-
-      status.textContent = 'Playing preview…';
-      progress.style.transition = `width ${samplerDur}ms linear`;
-      requestAnimationFrame(() => {
-        progress.style.width = '100%';
-      });
-
-      // Play audio if available
-      const audioPath = `../openmiir/audio/${clipId}.mp3`;
-      const audio = new Audio(audioPath);
-      audio.play().catch(() => {
-        console.log(`Audio not found for ${clipId}`);
-      });
-
-      samplerTimer = setTimeout(() => {
-        audio.pause();
-        status.textContent = 'Completed';
-        card.classList.add('done');
-        samplerIndex += 1;
-        runSamplerStep();
-      }, samplerDur);
-    }
-
-    function updateNavState() {
-      navButtons.forEach((btn, state) => {
-        btn.disabled = !unlockedStates.has(state);
-      });
-    }
-
-    async function enterLoading() {
-      unlockedStates.add('LOADING');
-      updateNavState();
-      await ensureWindowsLoaded();
-      setTimeout(() => {
-        setState('RESULTS');
-        enterResults();
-      }, loadingDelay);
-    }
-
-    async function ensureWindowsLoaded() {
-      if (windowsData !== null) {
-        return;
-      }
-      try {
-        const response = await fetch('data/ai_windows.csv');
-        if (!response.ok) {
-          throw new Error('Failed to load ai_windows.csv');
-        }
-        const csvText = await response.text();
-        windowsData = parseCsv(csvText);
-        clipWindowsMap = groupWindowsByClip(windowsData);
-      } catch (error) {
-        console.error(error);
-        windowsData = [];
-        clipWindowsMap = new Map();
-      }
-    }
-
-    function parseCsv(text) {
-      const lines = text.trim().split(/\r?\n/);
-      const headers = lines[0].split(',');
-      return lines.slice(1).map((line) => {
-        if (!line.trim()) {
-          return null;
-        }
-        const cells = line.split(',');
-        const record = {};
-        headers.forEach((h, idx) => {
-          record[h] = cells[idx];
-        });
-        record.t0 = Number(record.t0);
-        record.t1 = Number(record.t1);
-        record.window_index = Number(record.window_index);
-        record.theta = Number(record.theta);
-        record.alpha = Number(record.alpha);
-        record.beta = Number(record.beta);
-        record.lgam = Number(record.lgam);
-        record.sent = Number(record.sent);
-        record.EI = Number(record.EI);
-        return record;
-      }).filter(Boolean);
-    }
-
-    function groupWindowsByClip(records) {
-      const map = new Map();
-      records.forEach((row) => {
-        if (!row.clip_id) {
-          return;
-        }
-        if (!map.has(row.clip_id)) {
-          map.set(row.clip_id, []);
-        }
-        map.get(row.clip_id).push(row);
-      });
-      map.forEach((rows) => rows.sort((a, b) => a.t0 - b.t0));
-      return map;
-    }
-
-    function enterResults() {
-      console.log('enterResults: windowsData:', windowsData?.length, 'clipsData:', clipsData.length);
-      if (!windowsData || windowsData.length === 0 || clipsData.length === 0) {
-        console.error('Missing data for results view');
-        document.getElementById('results-summary').innerHTML = '<p class="empty">Run the pipeline to see results.</p>';
-        return;
-      }
-      console.log('Rendering results with', clipsData.length, 'clips and', windowsData.length, 'windows');
-      renderResultsChart();
-      const topClip = clipsData[0]?.clip_id;
-      if (topClip) {
-        selectClip(topClip);
-      }
-    }
-
-    function renderResultsChart() {
-      const chartDiv = document.getElementById('clips-chart');
-      const y = clipsData.map((clip) => clip.EI_mean ?? 0);
-      const x = clipsData.map((clip) => formatClipLabel(clip.clip_id));
-      const colors = clipsData.map((clip) => clip.clip_id === selectedClipId ? '#d62728' : '#1f77b4');
-
-      const trace = {
-        type: 'bar',
-        x,
-        y,
-        marker: { color: colors },
-        hovertemplate: 'EI μ %{y:.2f}<extra></extra>',
-      };
-
-      const layout = {
-        margin: { t: 10, r: 10, b: 60, l: 60 },
-        height: 360,
-        yaxis: { title: 'Engagement Index (EI)', zeroline: false },
-        xaxis: { title: 'Clip', tickangle: -30 },
-      };
-
-      Plotly.react(chartDiv, [trace], layout, { displayModeBar: false });
-      chartDiv.on('plotly_click', (event) => {
-        const clipLabel = event.points?.[0]?.x;
-        const clipId = findClipIdByLabel(clipLabel);
-        if (clipId) {
-          selectClip(clipId);
-        }
-      });
-
-      document.getElementById('results-summary').innerHTML = `
-        <div class="summary-card">
-          <p><strong>${clipsData.length}</strong> unique clips</p>
-          <p><strong>${windowsData.length}</strong> engagement windows</p>
-        </div>
-      `;
-    }
-
-    function selectClip(clipId) {
-      selectedClipId = clipId;
-      renderResultsChart();
-      renderClipDetail();
-      startWaveAnimation();
-    }
-
-    function renderClipDetail() {
-      const clip = clipsData.find((item) => item.clip_id === selectedClipId);
-      const detail = document.getElementById('clip-detail');
-      if (!clip) {
-        detail.innerHTML = '<p class="empty">Select a clip to inspect engagement.</p>';
-        return;
-      }
-
-      detail.innerHTML = `
-        <h3>${formatClipLabel(clip.clip_id)}</h3>
-        <ul>
-          <li><strong>Rank</strong> ${clip.rank}</li>
-          <li><strong>EI mean</strong> ${clip.EI_mean.toFixed(3)}</li>
-          <li><strong>EI sd</strong> ${(clip.EI_sd ?? 0).toFixed(3)}</li>
-          <li><strong>Windows</strong> ${clip.n_windows}</li>
-        </ul>
-      `;
-    }
-
-    function renderWaveLegend() {
-      const legend = document.getElementById('wave-legend');
-      legend.innerHTML = metrics.map((m) => `
-        <span><span class="swatch" style="background:${m.color}"></span>${m.label}</span>
-      `).join('');
-    }
-
-    function startWaveAnimation() {
-      cancelAnimationFrame(waveAnimationFrame);
-      const canvas = document.getElementById('wave-canvas');
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      waveData = clipWindowsMap.get(selectedClipId) || [];
-      if (!waveData.length) {
-        ctx.fillStyle = '#888';
-        ctx.fillText('No window data available for this clip.', 20, canvas.height / 2);
-        return;
-      }
-
-      const normalized = metrics.map((m) => normalizeSeries(waveData.map((row) => row[m.key])));
-      const times = waveData.map((row) => row.t0);
-      const totalFrames = Math.max(60, times.length);
-      wavePointer = 0;
-
-      function draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.lineWidth = 2;
-        const visible = Math.min(times.length, 600);
-        const startIndex = Math.max(0, wavePointer - visible);
-        const sliceTimes = times.slice(startIndex, wavePointer);
-
-        metrics.forEach((metric, idx) => {
-          const series = normalized[idx].slice(startIndex, wavePointer);
-          drawSeries(ctx, sliceTimes, series, metric.color, idx, canvas);
-        });
-
-        wavePointer += 1;
-        if (wavePointer < totalFrames) {
-          waveAnimationFrame = requestAnimationFrame(draw);
-        }
-      }
-
-      wavePointer = Math.min(600, times.length);
-      waveAnimationFrame = requestAnimationFrame(draw);
-    }
-
-    function drawSeries(ctx, times, series, color, offset, canvas) {
-      if (series.length === 0) {
-        return;
-      }
-      ctx.strokeStyle = color;
-      ctx.beginPath();
-      const padding = 16;
-      const height = canvas.height - padding * 2;
-      const width = canvas.width - padding * 2;
-      const step = width / Math.max(1, series.length - 1);
-      series.forEach((value, idx) => {
-        const x = padding + idx * step;
-        const y = padding + height * (1 - value);
-        if (idx === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
-        }
-      });
-      ctx.stroke();
-    }
-
-    function normalizeSeries(values) {
-      const finiteValues = values.filter((v) => Number.isFinite(v));
-      const min = Math.min(...finiteValues, 0);
-      const max = Math.max(...finiteValues, 1);
-      const range = max - min || 1;
-      return values.map((v) => {
-        if (!Number.isFinite(v)) {
-          return 0.5;
-        }
-        return (v - min) / range;
-      });
-    }
-
-    async function enterPlaylist() {
-      const grid = document.getElementById('playlist-grid');
-      const empty = document.getElementById('playlist-empty');
-      if (grid.dataset.loaded === 'true') {
-        return;
-      }
-      try {
-        const response = await fetch('data/playlist_recs.json');
-        if (!response.ok) {
-          throw new Error('Missing playlist data');
-        }
-        const items = await response.json();
-        if (!Array.isArray(items) || items.length === 0) {
-          throw new Error('Empty playlist');
-        }
-        renderPlaylist(items);
-        empty.hidden = true;
-        grid.dataset.loaded = 'true';
-      } catch (error) {
-        console.info(error.message);
-        grid.innerHTML = '';
-        empty.hidden = false;
-      }
-    }
-
-    function renderPlaylist(items) {
-      const grid = document.getElementById('playlist-grid');
-      grid.innerHTML = '';
-      items.slice(0, 12).forEach((item) => {
-        const card = document.createElement('article');
-        card.className = 'playlist-card';
-        card.innerHTML = `
-          <div class="cover" style="background-image:url('${item.image ?? ''}')"></div>
-          <div class="info">
-            <h3>${item.name}</h3>
-            <p>${item.artists}</p>
-            <a href="${item.url}" target="_blank" rel="noopener">Open in Spotify</a>
-          </div>
-        `;
-        grid.appendChild(card);
-      });
-    }
-
-    function formatClipLabel(id) {
-      return (id || '').replace('clip_', 'Clip ');
-    }
-
-    function findClipIdByLabel(label) {
-      const match = clipsData.find((clip) => formatClipLabel(clip.clip_id) === label);
-      return match?.clip_id ?? null;
-    }
-  </script>
+    <script src="focus.js"></script>
 </body>
 </html>

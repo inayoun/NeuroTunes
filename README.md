@@ -1,6 +1,6 @@
 # NeuroTunes
 
-NeuroTunes demonstrates an EEG-driven engagement index across the OpenMIIR dataset and publishes a static exploration site.
+NeuroTunes tracks focus patterns in EEG data using the OpenMIIR dataset.
 
 ## Demo Build Workflow
 
