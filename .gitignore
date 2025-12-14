@@ -3,4 +3,4 @@ __pycache__/
 node_modules/
 docs/data/*.csv
 .env
-openmiir/eeg/
+openmiir/
