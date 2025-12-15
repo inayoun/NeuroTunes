@@ -73,12 +73,12 @@ async function loadAndProcessData() {
 
 async function loadFocusData(subjectId) {
     try {
-        let response = await fetch(`data/${subjectId}_focus.json`);
+        let response = await fetch(`./data/${subjectId}_focus.json`);
         if (response.ok) {
             focusData = await response.json();
             console.log(`Loaded pre-generated focus data for ${subjectId}`);
         } else {
-            response = await fetch('data/ai_clips.json');
+            response = await fetch('./data/ai_clips.json');
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const clips = await response.json();
             if (!clips || clips.length === 0) throw new Error('No clip data found');
@@ -347,7 +347,7 @@ async function renderTrackDetail(track) {
     document.getElementById('wave-placeholder').classList.add('hidden');
     
     try {
-        const response = await fetch('data/ai_windows.csv');
+        const response = await fetch('./data/ai_windows.csv');
         if (!response.ok) throw new Error(`Failed to load CSV: ${response.status}`);
         const csvText = await response.text();
         const lines = csvText.split('\n');
